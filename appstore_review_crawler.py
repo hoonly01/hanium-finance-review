@@ -2,6 +2,7 @@ import requests
 import json
 import pandas as pd
 from datetime import datetime
+import uuid
 
 
 def get_app_store_reviews_and_appname(app_id, country='kr', pages=10):
@@ -25,14 +26,7 @@ def get_app_store_reviews_and_appname(app_id, country='kr', pages=10):
                 # 첫 entry는 앱 정보, 여기서 앱 이름 추출
                 app_name = entries[0].get('im:name', {}).get('label', f'app_{app_id}')
             for entry in entries[1:]:
-                review = {
-                    'author': entry.get('author', {}).get('name', {}).get('label', ''),
-                    'rating': int(entry.get('im:rating', {}).get('label', 0)),
-                    'title': entry.get('title', {}).get('label', ''),
-                    'content': entry.get('content', {}).get('label', ''),
-                    'updated_date': entry.get('updated', {}).get('label', '')
-                }
-                all_reviews.append(review)
+                all_reviews.append(entry)
             print(f"{page} 페이지의 리뷰를 성공적으로 가져왔습니다. (리뷰 수: {len(entries)-1})")
         except requests.exceptions.RequestException as e:
             print(f"HTTP 요청 중 에러 발생: {e}")
@@ -61,27 +55,57 @@ def read_app_ids(filename="app_ids.txt"):
     return app_ids
 
 
+def flatten_entry(entry, parent_key='', sep='.'):
+    items = []
+    for k, v in entry.items():
+        new_key = f"{parent_key}{sep}{k}" if parent_key else k
+        if isinstance(v, dict):
+            items.extend(flatten_entry(v, new_key, sep=sep).items())
+        else:
+            items.append((new_key, v))
+    return dict(items)
+
+
 if __name__ == "__main__":
-    # === 아래 변수만 수정하면 됩니다! ===
-    COUNTRY = "kr"                # 예: 'kr', 'us', 'jp' 등
-    PAGES_TO_CRAWL = 10           # 가져올 페이지 수 (1~10)
-    # =============================
+    COUNTRY = "kr"
+    PAGES_TO_CRAWL = 10
 
     app_ids = read_app_ids("app_ids.txt")
     if not app_ids:
         print("app_ids.txt 파일에 app_id가 없습니다. 파일을 확인하세요.")
+        exit()
+
+    all_apps_reviews = []
     today_str = datetime.now().strftime('%Y%m%d')
+
     for app_id in app_ids:
         print(f"\n[앱 ID: {app_id}] 리뷰 크롤링 시작...")
         app_name, reviews_data = get_app_store_reviews_and_appname(app_id=app_id, country=COUNTRY, pages=PAGES_TO_CRAWL)
         if reviews_data:
-            df = pd.DataFrame(reviews_data)
-            # 파일명: 앱이름_날짜.csv (앱이름에 파일명 불가 문자가 있으면 _로 대체)
-            safe_app_name = app_name.replace('/', '_').replace('\\', '_').replace(':', '_').replace('*', '_').replace('?', '_').replace('"', '_').replace('<', '_').replace('>', '_').replace('|', '_').replace(' ', '')
-            output_filename = f'{safe_app_name}_{today_str}.csv'
-            df.to_csv(output_filename, index=False, encoding='utf-8-sig')
-            print(f"총 {len(reviews_data)}개의 리뷰를 수집하여 '{output_filename}' 파일로 저장했습니다.")
-            print("파일 내용 미리보기:")
-            print(df.head())
+            print(f"'{app_name}' 앱 리뷰 {len(reviews_data)}개 수집 완료.")
+            for entry in reviews_data:
+                flat = flatten_entry(entry)
+                flat['review_id'] = str(uuid.uuid4())
+                flat['app_id'] = app_id
+                flat['app_name'] = app_name
+                flat['platform'] = 'appstore'
+                all_apps_reviews.append(flat)
         else:
-            print(f"앱 ID {app_id}의 리뷰 데이터를 가져오지 못했습니다.") 
+            print(f"앱 ID {app_id}의 리뷰 데이터를 가져오지 못했습니다.")
+
+    if all_apps_reviews:
+        df = pd.DataFrame(all_apps_reviews)
+        # 메타데이터 컬럼을 항상 앞에 오도록 순서 지정
+        meta_cols = ['review_id', 'app_id', 'app_name', 'platform']
+        other_cols = [col for col in df.columns if col not in meta_cols]
+        ordered_cols = meta_cols + other_cols
+        df = df[ordered_cols]
+        output_filename = f'reviews_{today_str}_raw_review.csv'
+        df.to_csv(output_filename, index=False, encoding='utf-8-sig')
+        print(f"\n========================================================")
+        print(f"총 {len(all_apps_reviews)}개의 리뷰를 수집하여 '{output_filename}' 파일로 저장했습니다.")
+        print(f"========================================================")
+        print("파일 내용 미리보기 (상위 5개):")
+        print(df.head())
+    else:
+        print("\n수집된 리뷰가 없어 파일을 생성하지 않았습니다.") 
