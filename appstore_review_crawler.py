@@ -3,7 +3,7 @@ import json
 import pandas as pd
 from datetime import datetime
 import uuid
-
+import time
 
 def get_app_store_reviews_and_appname(app_id, country='kr', pages=10):
     """
@@ -92,6 +92,7 @@ if __name__ == "__main__":
                 all_apps_reviews.append(flat)
         else:
             print(f"앱 ID {app_id}의 리뷰 데이터를 가져오지 못했습니다.")
+        time.sleep(2)
 
     if all_apps_reviews:
         df = pd.DataFrame(all_apps_reviews)
