@@ -4,6 +4,7 @@ import pandas as pd
 from datetime import datetime
 import uuid
 import time
+import os
 
 def get_app_store_reviews_and_appname(app_id, country='kr', pages=10):
     """
@@ -37,9 +38,9 @@ def get_app_store_reviews_and_appname(app_id, country='kr', pages=10):
     return app_name, all_reviews
 
 
-def read_app_ids(filename="app_ids.txt"):
+def read_app_ids(filename="appstore_app_ids.txt"):
     """
-    app_ids.txt 파일에서 app_id만 추출하여 리스트로 반환
+    appstore_app_ids.txt 파일에서 app_id만 추출하여 리스트로 반환
     주석(#) 및 빈 줄은 무시
     """
     app_ids = []
@@ -70,9 +71,9 @@ if __name__ == "__main__":
     COUNTRY = "kr"
     PAGES_TO_CRAWL = 10
 
-    app_ids = read_app_ids("app_ids.txt")
+    app_ids = read_app_ids("appstore_app_ids.txt")
     if not app_ids:
-        print("app_ids.txt 파일에 app_id가 없습니다. 파일을 확인하세요.")
+        print("appstore_app_ids.txt 파일에 app_id가 없습니다. 파일을 확인하세요.")
         exit()
 
     all_apps_reviews = []
@@ -101,7 +102,12 @@ if __name__ == "__main__":
         other_cols = [col for col in df.columns if col not in meta_cols]
         ordered_cols = meta_cols + other_cols
         df = df[ordered_cols]
-        output_filename = f'reviews_{today_str}_raw_review.csv'
+        
+        # result/csv 디렉토리가 없으면 생성
+        output_dir = "result/csv"
+        os.makedirs(output_dir, exist_ok=True)
+        
+        output_filename = os.path.join(output_dir, f'reviews_{today_str}_raw_review.csv')
         df.to_csv(output_filename, index=False, encoding='utf-8-sig')
         print(f"\n========================================================")
         print(f"총 {len(all_apps_reviews)}개의 리뷰를 수집하여 '{output_filename}' 파일로 저장했습니다.")
